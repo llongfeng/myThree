@@ -1,0 +1,39 @@
+[
+  {
+    "id": "document",
+    "name": "Basic Flight",
+    "version": "1.0"
+  },
+  {
+    "id": "Aircraft/Aircraft1",
+    "availability": "2012-08-04T16:00:00Z/2012-08-04T16:20:00Z",
+    "position": {
+      "epoch": "2012-08-04T16:00:00Z",
+      "cartographicDegrees": [
+        0, -115.0, 37.0, 10000,
+        600, -115.1, 37.1, 10500,
+        1200, -115.2, 37.2, 11000
+      ]
+    },
+    "orientation": {
+      "epoch": "2012-08-04T16:00:00Z",
+      "unitQuaternion": [
+        0, 0, 0, 0, 1,
+        600, 0, 0, 0, 1,
+        1200, 0, 0, 0, 1
+      ]
+    },
+    "path": {
+      "material": {
+        "solidColor": {
+          "color": {
+            "rgba": [255, 0, 255, 255]
+          }
+        }
+      },
+      "width": 5,
+      "leadTime": 0,
+      "trailTime": 3600
+    }
+  }
+]

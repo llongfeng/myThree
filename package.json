@@ -1,0 +1,32 @@
+{
+  "name": "my-3d-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@epicgames-ps/lib-pixelstreamingfrontend-ue5.3": "^1.0.9",
+    "@epicgames-ps/lib-pixelstreamingfrontend-ui-ue5.3": "^1.0.9",
+    "cesium": "^1.140.0",
+    "pinia": "^3.0.4",
+    "three": "^0.183.2",
+    "vite-plugin-cesium": "^1.2.23",
+    "vite-plugin-node-polyfills": "^0.26.0",
+    "vue": "^3.5.32",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "@types/three": "^0.183.1",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/tsconfig": "^0.9.1",
+    "sass": "^1.99.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.4",
+    "vue-tsc": "^3.2.6"
+  }
+}
