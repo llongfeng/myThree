@@ -13,7 +13,7 @@
                     Cesium城市飞线
                 </button>
                 <button :class="{ active: page === 'orbit' }" @click="page = 'orbit'">
-                    Cesium城市飞线轨道
+                    Cesium城市
                 </button>
             </div>
         </div>
@@ -33,7 +33,7 @@ import ThreeEngine from './components/ThreeEngine.vue'
 import CesiumEngine from './components/CesiumEngine.vue'
 import CesiumFly from './Cesium02-flyline.vue'
 import Cesium from './Cesium02-flyline.vue'
-import Orbit from './Cesium01.vue'
+import Orbit from './components/cesium-city.vue'
 
 const page = ref('three')
 const threeRef = ref(null)

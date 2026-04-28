@@ -1,206 +1,223 @@
 <template>
-    <!-- 渲染容器：全屏的div，用于挂载Three.js的渲染画布 -->
+    <!-- 渲染容器：全屏div，用于挂载Three.js渲染生成的canvas画布
+         100vw = 视口宽度 100vh = 视口高度，实现全屏展示 -->
     <div ref="container" style="width:100vw; height:100vh;"></div>
 </template>
 
 <script setup>
-// 导入Vue3组合式API：ref创建响应式引用，onMounted生命周期钩子
+// ==================== 依赖导入区 ====================
+// Vue3组合式API：ref创建DOM引用，onMounted生命周期钩子（页面挂载完成后执行）
 import { ref, onMounted } from 'vue'
-// 导入Three.js核心库
+
+// Three.js核心库：包含场景、相机、渲染器、几何体、材质、灯光等所有核心类
 import * as THREE from 'three'
-// 导入gltf模型加载器（用于加载.glb/.gltf格式模型）
+
+// GLTFLoader：.glb/.gltf模型加载器，Three.js官方推荐的模型格式加载器
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-// 导入轨道控制器（实现鼠标旋转、缩放、平移相机）
+
+// OrbitControls：轨道控制器，实现鼠标旋转、缩放、平移相机
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-// 导入FPS帧率插件
+
+// Stats：FPS性能监控面板，显示每秒渲染帧数，用于性能优化
 import Stats from 'three/addons/libs/stats.module.js'
 
-// ======================================
-// 全局变量定义区
-// ======================================
+// ==================== 全局变量定义区 ====================
 
-// 获取DOM容器引用（Three.js画布会挂载到这里）
+// 获取DOM容器引用，用于挂载Three.js的canvas画布
 const container = ref(null)
 
-// Three.js核心三大件 + 控制器
-let scene, camera, renderer, controls
+// Three.js 渲染核心四大件
+let scene        // 场景（Scene）：所有物体、灯光、相机的容器
+let camera       // 相机（Camera）：决定观察视角
+let renderer     // 渲染器（Renderer）：将场景+相机渲染到屏幕
+let controls     // 轨道控制器：控制相机交互
 
-// 可点击的物体数组（存储城市模型里所有网格）
+// 可交互物体数组：存储城市模型中所有可点击、可高亮的网格
 let clickableObjects = []
 
-// 无人机与城市模型相关变量
+// 无人机 & 城市模型相关
 let drone = null            // 无人机模型对象
-let cityModel = null        // 城市模型对象
-let cityCenter = new THREE.Vector3()  // 城市模型中心点
-let cityBox = null          // 城市模型包围盒（用于计算边界）
+let cityModel = null        // 城市整体模型
+let cityCenter = new THREE.Vector3()  // 城市模型中心点（三维向量）
+let cityBox = null          // 城市模型包围盒（用于计算尺寸、边界、中心）
 
-// 无人机自动飞行进度（0~1循环）
-let droneProgress = 0
-// 无人机配置参数（高度、速度、缩放比例）
+// 无人机自动飞行控制
+let droneProgress = 0       // 飞行进度 0~1 循环
+// 无人机配置（可直接修改调整效果）
 const DroneConfig = {
-    height: 10,
-    speed: 0.005,
-    scale: 0.03
+    height: 10,      // 飞行高度（在城市最高点之上）
+    speed: 0.002,    // 飞行速度
+    scale: 0.03      // 模型缩放比例
 }
 
-// 无人机轨迹线
-let dronePathLine = null
+let dronePathLine = null    // 无人机飞行轨迹线
 
-// 是否处于【物体内部】模式（W/S移动生效）
-let isInsideObject = false
-// 记录当前进入的物体中心点（用于计算相机距离）
-let currentTargetCenter = null
+// 物体内部漫游模式
+let isInsideObject = false        // 是否进入物体内部
+let currentTargetCenter = null    // 当前进入物体的中心点
 
-// ======================================
-// 单击/拖动 区分逻辑变量（核心修复）
-// 作用：只有单击才进入物体，拖动视角不触发
-// ======================================
-let mouseDownPos = { x: 0, y: 0 }  // 鼠标按下时的坐标
+// ==================== 鼠标交互：区分单击 / 拖动 ====================
+// 作用：拖动视角时不触发点击进入，只有单击才触发
+let mouseDownPos = { x: 0, y: 0 }  // 鼠标按下坐标
 let isDragging = false             // 是否正在拖动
-const dragThreshold = 5            // 拖动阈值：移动超过5像素判定为拖动
+const dragThreshold = 5            // 拖动阈值（>5像素判定为拖动）
 
-// 键盘控制相关
-const keys = {}                    // 存储按键状态（true=按下）
+// ==================== 键盘控制相机移动 ====================
+const keys = {}                    // 按键状态：true=按下
 const moveSpeed = 0.06             // 相机移动速度
-const worldDir = new THREE.Vector3() // 相机朝向向量
+const worldDir = new THREE.Vector3() // 相机世界方向向量
 
-// 新增：高亮与选中
-let selectedObject = null
-let hoveredObject = null
+// ==================== 鼠标高亮 / 选中 ====================
+let selectedObject = null    // 当前选中物体
+let hoveredObject = null     // 当前悬浮物体
+// 高亮材质：自发光黄色（MeshBasicMaterial不受光照影响）
 const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 })
+// 悬浮材质：自发光绿色
 const hoverMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff88 })
 
-// FPS面板
+// FPS性能面板
 let stats = null
 
-// ======================================
-// 1. 初始化Three.js场景、相机、渲染器、灯光、控制器
-// ======================================
+// ==================== 1. 初始化Three.js核心环境 ====================
 function init() {
-    // 创建场景（所有物体、灯光都放在场景里）
+    // -------------------- 1.1 创建场景 --------------------
+    // Scene：场景，是所有3D对象的容器，必须创建
     scene = new THREE.Scene()
 
-    // 增强功能：天空盒背景（提升画面质感）
-    const cubeLoader = new THREE.CubeTextureLoader()
-    cubeLoader.setPath('https://threejs.org/examples/textures/cube/skybox/')
-    const skyTexture = cubeLoader.load([
-        'px.jpg', 'nx.jpg',
-        'py.jpg', 'ny.jpg',
-        'pz.jpg', 'nz.jpg'
-    ])
-    scene.background = skyTexture
+    // -------------------- 天空盒背景 ✅ 修复：跨域天空盒 + 正确加载 --------------------
+    const textureLoader = new THREE.TextureLoader();
+    const equirectangularTexture = textureLoader.load(
+        'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/aerial_grass_rock_1k.hdr',
+        () => {
+            equirectangularTexture.mapping = THREE.EquirectangularReflectionMapping;
+            scene.background = equirectangularTexture;
+            scene.environment = equirectangularTexture;
+            console.log('✅ HDR天空加载成功');
+        },
+        undefined,
+        (err) => {
+            console.error('HDR加载失败，使用纯色天空', err);
+            scene.background = new THREE.Color(0x87ceeb);
+        }
+    );
 
-    // 创建透视相机（人眼视角，最常用）
-    // 参数：视野角度60°、窗口宽高比、近裁剪面0.001、远裁剪面2000
+    // -------------------- 1.2 创建透视相机 --------------------
+    // PerspectiveCamera：透视相机（模拟人眼，近大远小）
+    // 参数：fov视场角、宽高比、近裁剪面、远裁剪面
     camera = new THREE.PerspectiveCamera(
-        60,
-        window.innerWidth / window.innerHeight,
-        0.001,
-        2000
+        60,                    // fov：视野角度，越大看到范围越广
+        window.innerWidth / window.innerHeight, // 相机宽高比=画布宽高比
+        0.001,                 // near：近裁剪面，小于该距离不渲染
+        2000                   // far：远裁剪面，大于该距离不渲染
     )
-    // 设置相机初始位置
+    // 设置相机初始位置（x,y,z）
     camera.position.set(100, 20, 3)
 
-    // 创建渲染器（抗锯齿开启）
+    // -------------------- 1.3 创建渲染器 --------------------
+    // WebGLRenderer：WebGL渲染器，真正把3D画面画出来
+    // antialias: true 开启抗锯齿，画面更平滑
     renderer = new THREE.WebGLRenderer({ antialias: true })
-    // 设置渲染画布大小为全屏
+    // 设置渲染画布尺寸（全屏）
     renderer.setSize(window.innerWidth, window.innerHeight)
-    // 开启阴影渲染
+    // 开启阴影渲染（让物体能投射和接收阴影）
     renderer.shadowMap.enabled = true
-    // 将渲染画布添加到DOM容器
+
+    // ✅ 必须加：HDR天空显示关键配置
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // 将渲染的canvas画布挂载到Vue容器中
     container.value.appendChild(renderer.domElement)
 
-    // 创建平行光（模拟太阳光，可产生阴影）
+    // -------------------- 1.4 添加灯光 --------------------
+    // 平行光（DirectionalLight）：模拟太阳光，平行发射，可产生阴影
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5)
-    directionalLight.position.set(50, 100, 20)
-    directionalLight.castShadow = true
+    directionalLight.position.set(50, 100, 20) // 光源位置
+    directionalLight.castShadow = true           // 开启阴影投射
     scene.add(directionalLight)
 
-    // 创建环境光（均匀照亮整个场景，无阴影）
+    // 环境光（AmbientLight）：均匀照亮所有物体，无方向、无阴影
     scene.add(new THREE.AmbientLight(0xffffff, 1))
 
-    // 初始化轨道控制器（绑定相机和画布）
+    // -------------------- 1.5 初始化轨道控制器 --------------------
+    // 绑定相机与画布，实现鼠标交互
     controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true        // 开启阻尼（平滑效果）
-    controls.dampingFactor = 0.5         // 阻尼系数
-    controls.rotateSpeed = 0.8           // 旋转速度
-    controls.zoomSpeed = 1.2             // 缩放速度
-    controls.panSpeed = 0.8              // 平移速度
-    controls.minDistance = 1             // 最小缩放距离（防止贴脸穿透）
-    controls.maxDistance = 200           // 最大缩放距离
-    controls.enablePan = true            // 允许平移
+    controls.enableDamping = true        // 开启阻尼（惯性平滑效果）
+    controls.dampingFactor = 0.5         // 阻尼系数（越小越丝滑）
+    controls.rotateSpeed = 0.8           // 鼠标旋转速度
+    controls.zoomSpeed = 1.2             // 鼠标缩放速度
+    controls.panSpeed = 0.8              // 鼠标平移速度
+    controls.minDistance = 1             // 相机最近距离（防止贴地穿透）
+    controls.maxDistance = 200           // 相机最远距离
+    controls.enablePan = true            // 允许右键平移
 
-    // ======================
-    // 核心：限制相机俯仰角度（和Y轴夹角，范围0~π）
-    // 0 = 正上方，π/2 = 水平，π = 正下方
-    // 最大俯角：水平向下10度（不能再低了）
-    // 最小仰角：向上10度（防止看天过头）
-    // ======================
-    controls.maxPolarAngle = Math.PI / 2 - Math.PI / 180 * 10
-    controls.minPolarAngle = Math.PI / 180 * 10
+    // ==================== 核心：限制相机俯仰角度 ====================
+    // 极角限制：相机与Y轴的夹角，范围 0 ~ π
+    // 0 = 俯视正下方，π/2=水平视角，π=仰视正上方
+    controls.maxPolarAngle = Math.PI / 2 - Math.PI / 180 * 10  // 最大俯角：水平向下10°
+    controls.minPolarAngle = Math.PI / 180 * 10                // 最大仰角：向上10°
 
-    // 增强功能：初始化FPS面板
+    // -------------------- 1.6 初始化FPS面板 --------------------
     stats = new Stats()
-    stats.showPanel(0)
+    stats.showPanel(0) // 0：FPS面板，1：渲染时间，2：内存占用
     document.body.appendChild(stats.dom)
 }
 
-// ======================================
-// 2. 加载城市模型（glb格式）
-// ======================================
+// ==================== 2. 加载城市模型 ====================
 function loadModel() {
+    // 创建GLTF模型加载器
     const loader = new GLTFLoader()
-    // 加载模型文件
+
+    // 加载模型：参数（模型路径，加载完成回调）
     loader.load('/gltf/city2.glb', gltf => {
-        // 获取模型根对象
+        // gltf.scene：模型根对象
         cityModel = gltf.scene
         // 将模型添加到场景
         scene.add(cityModel)
 
-        // 计算模型的包围盒（用于获取中心点、边界）
+        // Box3：三维包围盒，setFromObject：计算模型的最小包围盒
         cityBox = new THREE.Box3().setFromObject(cityModel)
-        // 获取模型中心点
+        // getCenter：获取包围盒中心点，存入cityCenter
         cityBox.getCenter(cityCenter)
 
-        // 遍历模型所有子物体
+        // traverse：递归遍历模型所有子物体
         cityModel.traverse(child => {
-            // 如果是网格物体（可渲染、可点击）
+            // 判断是否为网格（Mesh：几何体+材质，可渲染）
             if (child.isMesh) {
-                // 保存原始材质（备用）
+                // userData：Three.js自定义数据存储区，用于保存原始材质
                 child.userData.originalMaterial = child.material.clone()
 
-                // 计算物体高度：用于判断是否可进入
+                // 计算物体高度
                 const box = new THREE.Box3().setFromObject(child)
                 const height = box.max.y - box.min.y
-                child.userData.height = height // 保存高度
-                child.userData.canEnter = height > 3 // 高度>3米才能进入
+                child.userData.height = height
+                child.userData.canEnter = height > 3 // 高度>3米才可进入
 
-                // 加入可点击数组
+                // 存入可点击数组
                 clickableObjects.push(child)
             }
         })
 
-        // 控制器目标点指向城市中心
+        // 控制器观察目标 = 城市中心
         controls.target.copy(cityCenter)
-        controls.update()
+        controls.update() // 强制更新控制器
 
-        // 增强功能：创建无人机轨迹
+        // 创建无人机飞行轨迹
         createDronePath()
-
-        // 城市加载完成后，加载无人机
+        // 加载无人机
         loadDroneModel()
     })
 }
 
-// ======================================
-// 增强功能：创建无人机环绕轨迹
-// ======================================
+// ==================== 3. 创建无人机环绕轨迹 ====================
 function createDronePath() {
     if (!cityBox) return
-    const min = cityBox.min
-    const max = cityBox.max
-    const y = cityBox.max.y + DroneConfig.height
+    const min = cityBox.min  // 包围盒最小值
+    const max = cityBox.max  // 包围盒最大值
+    const y = cityBox.max.y + DroneConfig.height // 飞行高度
 
+    // 定义方形轨迹点
     const points = [
         new THREE.Vector3(min.x, y, min.z),
         new THREE.Vector3(max.x, y, min.z),
@@ -209,44 +226,42 @@ function createDronePath() {
         new THREE.Vector3(min.x, y, min.z)
     ]
 
+    // BufferGeometry：高性能几何体，setFromPoints从点创建线
     const geometry = new THREE.BufferGeometry().setFromPoints(points)
+    // LineDashedMaterial：虚线材质
     const material = new THREE.LineDashedMaterial({
         color: 0x0099ff,
-        dashSize: 3,
-        gapSize: 1.5,
+        dashSize: 3,   // 实线长度
+        gapSize: 1.5,  // 间隔长度
     })
 
+    // Line：创建线模型
     dronePathLine = new THREE.Line(geometry, material)
+    // computeLineDistances：计算线段距离（必须调用，虚线才能显示）
     dronePathLine.computeLineDistances()
     scene.add(dronePathLine)
 }
 
-// ======================================
-// 3. 加载无人机模型
-// ======================================
+// ==================== 4. 加载无人机模型 ====================
 function loadDroneModel() {
     const loader = new GLTFLoader()
     loader.load('/models/drone.glb', gltf => {
         drone = gltf.scene
-        // 设置无人机缩放
+        // set：设置x/y/z三轴缩放
         drone.scale.set(DroneConfig.scale, DroneConfig.scale, DroneConfig.scale)
         scene.add(drone)
     })
 }
 
-// ======================================
-// 4. 无人机自动绕城市飞行逻辑
-// ======================================
+// ==================== 5. 无人机自动飞行逻辑 ====================
 function updateDrone() {
-    // 模型未加载完成则不执行
     if (!drone || !cityBox) return
 
     // 进度累加
     droneProgress += DroneConfig.speed
-    // 循环（0~1）
+    // 循环：超过1重置为0
     if (droneProgress > 1) droneProgress = 0
 
-    // 获取城市边界
     const min = cityBox.min
     const max = cityBox.max
     const width = max.x - min.x
@@ -255,7 +270,7 @@ function updateDrone() {
     let x, z
     const p = droneProgress
 
-    // 四段路径：右 → 前 → 左 → 后 绕城市一圈
+    // 四段路径：右 → 前 → 左 → 后
     if (p < 0.25) {
         const t = p / 0.25
         x = min.x + width * t
@@ -274,46 +289,48 @@ function updateDrone() {
         z = min.z + depth * t
     }
 
-    // 高度 = 城市最高点 + 配置高度
+    // 设置无人机高度
     const y = cityBox.max.y + DroneConfig.height
-    // 设置无人机位置
+    // 设置位置
     drone.position.set(x, y, z)
-    // 无人机朝向
+    // lookAt：让物体朝向某个坐标
     drone.lookAt(x, y, z + 1)
 }
 
-// ======================================
-// 5. 鼠标点击事件（单击进入物体，拖动不触发）
-// 功能：点击高亮 + 高度>3米可进入内部
-// ======================================
+// ==================== 6. 鼠标点击事件 ====================
 function initClickEvent() {
-    const raycaster = new THREE.Raycaster()  // 射线投射器（用于点击检测）
-    const mouse = new THREE.Vector2()        // 鼠标坐标
+    // Raycaster：射线投射器，用于鼠标拾取3D物体
+    const raycaster = new THREE.Raycaster()
+    const mouse = new THREE.Vector2() // 鼠标坐标
 
-    // 鼠标按下：记录起始位置
+    // 鼠标按下：记录起点
     window.addEventListener('mousedown', e => {
         mouseDownPos.x = e.clientX
         mouseDownPos.y = e.clientY
-        isDragging = false  // 重置拖动状态
+        isDragging = false
     })
 
-    // 鼠标移动：判断是否超过阈值 → 标记为拖动
+    // 鼠标移动：判断是否拖动
     window.addEventListener('mousemove', e => {
         const dx = e.clientX - mouseDownPos.x
         const dy = e.clientY - mouseDownPos.y
+        // 勾股定理计算移动距离
         if (Math.sqrt(dx * dx + dy * dy) > dragThreshold) {
             isDragging = true
         }
     })
 
-    // 鼠标抬起：只有【非拖动】才执行点击逻辑
+    // 鼠标抬起：非拖动才执行点击
     window.addEventListener('mouseup', e => {
         if (isDragging) return
 
+        // 设备坐标 → 标准化设备坐标（-1~1）
         mouse.x = (e.clientX / window.innerWidth) * 2 - 1
         mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
 
+        // 从相机发射一条射线
         raycaster.setFromCamera(mouse, camera)
+        // 计算射线与物体的交点
         const intersects = raycaster.intersectObjects(clickableObjects, true)
 
         if (intersects.length > 0) {
@@ -323,40 +340,31 @@ function initClickEvent() {
             if (selectedObject) {
                 selectedObject.material = selectedObject.userData.originalMaterial
             }
-            // 设置当前选中高亮
             selectedObject = obj
-            selectedObject.material = highlightMaterial
 
-            // ======================================
-            // 核心判断：只有高度>3米才允许进入内部
-            // ======================================
-            console.log('当前物体是否可进入：', obj.userData.canEnter)
+            // 判断是否可进入
             if (!obj.userData.canEnter) {
                 console.log('ℹ️ 该物体高度不足3米，无法进入')
                 return
             }
 
+            // 获取物体中心
             const box = new THREE.Box3().setFromObject(obj)
             const targetCenter = new THREE.Vector3()
             box.getCenter(targetCenter)
             currentTargetCenter = targetCenter
 
-            const cameraDistance = camera.position.distanceTo(targetCenter)
-
-            if (!isInsideObject || cameraDistance > 5) {
-                isInsideObject = true
-                const cameraOffset = new THREE.Vector3(1, 0, 0)
-                camera.position.copy(targetCenter.clone().add(cameraOffset.multiplyScalar(0.5)))
-                controls.target.copy(targetCenter)
-                console.log('✅ 单击进入物体内部')
-            }
+            // 进入内部模式
+            isInsideObject = true
+            const cameraOffset = new THREE.Vector3(1, 0, 0)
+            camera.position.copy(targetCenter.clone().add(cameraOffset.multiplyScalar(0.5)))
+            controls.target.copy(targetCenter)
+            console.log('✅ 进入物体内部')
         }
     })
 }
 
-// ======================================
-// 增强功能：鼠标悬浮高亮
-// ======================================
+// ==================== 7. 鼠标悬浮高亮 ====================
 function initMouseHover() {
     const raycaster = new THREE.Raycaster()
     const mouse = new THREE.Vector2()
@@ -385,9 +393,7 @@ function initMouseHover() {
     })
 }
 
-// ======================================
-// 6. 键盘监听（W/S 前进后退 + ESC退出内部）
-// ======================================
+// ==================== 8. 键盘控制 ====================
 function initKeyboard() {
     window.addEventListener('keydown', e => {
         keys[e.key.toLowerCase()] = true
@@ -399,7 +405,7 @@ function initKeyboard() {
                 selectedObject.material = selectedObject.userData.originalMaterial
                 selectedObject = null
             }
-            console.log('📤 ESC 退出物体内部')
+            console.log('📤 ESC 退出内部')
         }
     })
 
@@ -408,28 +414,25 @@ function initKeyboard() {
     })
 }
 
-// ======================================
-// 7. 相机移动更新（仅内部模式生效，纯水平移动）
-// ======================================
+// ==================== 9. 相机内部移动 ====================
 function updateMove() {
     if (!isInsideObject) return
 
-    // 远离物体超过5米，自动退出内部
+    // 远离物体>5米自动退出
     if (currentTargetCenter && camera.position.distanceTo(currentTargetCenter) > 5) {
         isInsideObject = false
-        // 退出时恢复材质
         if (selectedObject) {
             selectedObject.material = selectedObject.userData.originalMaterial
             selectedObject = null
         }
-        console.log('📤 已离开物体（距离>5米）')
+        console.log('📤 已离开物体')
         return
     }
 
-    // 获取相机朝向，只保留水平方向
+    // getWorldDirection：获取相机世界朝向
     camera.getWorldDirection(worldDir)
-    worldDir.y = 0
-    worldDir.normalize()
+    worldDir.y = 0 // 只保留水平方向
+    worldDir.normalize() // 归一化（长度=1）
 
     // W前进 S后退
     if (keys['w']) {
@@ -440,13 +443,12 @@ function updateMove() {
     }
 }
 
-// ======================================
-// 8. 动画循环（每一帧执行）
-// ======================================
+// ==================== 10. 动画渲染循环 ====================
 function animate() {
+    // requestAnimationFrame：浏览器优化的动画循环，每秒60次
     requestAnimationFrame(animate)
 
-    // ========== 相机角度安全锁（强制限制俯角，防止穿透到模型底部） ==========
+    // ========== 相机防穿透安全锁：强制限制俯角，永不看地面以下 ==========
     const angle = Math.atan2(
         Math.sqrt(
             (camera.position.x - controls.target.x) ** 2 +
@@ -454,7 +456,6 @@ function animate() {
         ),
         camera.position.y - controls.target.y
     )
-    // 限制最小俯角（和水平方向夹角≥15度，即不能低于目标点太多）
     if (angle < Math.PI / 180 * 15) {
         camera.position.y = controls.target.y +
             Math.sqrt(
@@ -463,25 +464,24 @@ function animate() {
             ) / Math.tan(Math.PI / 180 * 15)
     }
 
-    stats.update()          // FPS更新
-    updateMove()            // 相机移动
-    updateDrone()           // 无人机
-    controls.update()       // 控制器
-    renderer.render(scene, camera)
+    stats.update()          // 更新FPS
+    updateMove()            // 更新相机移动
+    updateDrone()           // 更新无人机
+    controls.update()       // 更新控制器
+    renderer.render(scene, camera) // 渲染画面
 }
 
-// ======================================
-// 9. 窗口大小自适应
-// ======================================
+// ==================== 11. 窗口大小自适应 ====================
 window.addEventListener('resize', () => {
+    // 更新相机宽高比
     camera.aspect = window.innerWidth / window.innerHeight
+    // 更新相机投影矩阵（必须调用）
     camera.updateProjectionMatrix()
+    // 更新渲染尺寸
     renderer.setSize(window.innerWidth, window.innerHeight)
 })
 
-// ======================================
-// 10. 生命周期：页面挂载完成后启动程序
-// ======================================
+// ==================== 12. 生命周期启动 ====================
 onMounted(() => {
     init()
     loadModel()
@@ -493,7 +493,7 @@ onMounted(() => {
 </script>
 
 <style>
-/* 全局样式清除默认边距，实现全屏 */
+/* 清除默认边距，确保全屏 */
 * {
     margin: 0;
     padding: 0;

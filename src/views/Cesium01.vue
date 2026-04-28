@@ -6,7 +6,6 @@
 import { onMounted } from 'vue';
 import * as Cesium from 'cesium';
 
-// Cesium Ion 令牌
 Cesium.Ion.defaultAccessToken =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYzFhNDc5Zi1mYjVlLTQ5MDEtODIzOC0xMDc5Njk4ZGJjY2QiLCJpZCI6NDE3MzgzLCJpYXQiOjE3NzYwNjAxNzJ9.VGBInP8aLnTt5ibVkS3ZcXYquQ7OqGjJzWRvHEaf8T4';
 
@@ -21,24 +20,20 @@ onMounted(async () => {
     sceneModePicker: false,
     navigationHelpButton: false,
     fullscreenButton: false,
-
     sceneMode: Cesium.SceneMode.MORPHING,
-    navigation: true,
   });
 
   viewer.cesiumWidget.creditContainer.style.display = 'none';
 
-  // 鼠标交互开启
+  // 鼠标控制
   viewer.scene.screenSpaceCameraController.enableZoom = true;
   viewer.scene.screenSpaceCameraController.enableRotate = true;
   viewer.scene.screenSpaceCameraController.enableTilt = true;
   viewer.scene.screenSpaceCameraController.enablePan = true;
-  viewer.scene.screenSpaceCameraController.enableLook = true;
-
-  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 200;
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50;
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = 20000;
 
-  // 高德底图
+  // 高德地图
   const gaodeVec = new Cesium.UrlTemplateImageryProvider({
     url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
   });
@@ -51,7 +46,7 @@ onMounted(async () => {
   const layer = viewer.imageryLayers.addImageryProvider(gaodeImg);
   layer.alpha = 0.5;
 
-  // 相机视角：天安门上空
+  // 视角
   viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(116.39746, 39.90421, 1000),
     orientation: {
@@ -61,12 +56,13 @@ onMounted(async () => {
     },
   });
 
+  // 3D建筑
   Cesium.Cesium3DTileset.fromIonAssetId(2275207).then((tileset) => {
     viewer.scene.primitives.add(tileset);
-    console.log('✅ 北京真实3D建筑瓦片加载成功');
+    console.log('✅ 北京3D建筑加载成功');
   });
 
-  // ===================== 绕天安门飞行（高度 30 米）=====================
+  // ===================== 无人机飞行 =====================
   const czmlData = [
     { id: 'document', name: 'Circle-Tiananmen', version: '1.0' },
     {
@@ -75,56 +71,75 @@ onMounted(async () => {
       position: {
         epoch: '2025-01-01T00:00:00Z',
         cartographicDegrees: [
-          0, 116.39746, 39.90421, 300,  // 起点：天安门（高度30米）
-          20, 116.39900, 39.90500, 300,  // 右上
-          40, 116.40000, 39.90421, 300,  // 右
-          60, 116.39900, 39.90340, 300,  // 右下
-          80, 116.39746, 39.90260, 300,  // 下
-          100, 116.39590, 39.90340, 300,  // 左下
-          120, 116.39490, 39.90421, 300,  // 左
-          140, 116.39590, 39.90500, 300,  // 左上
-          160, 116.39746, 39.90421, 300,  // 回到起点
+          0, 116.39746, 39.90421, 300,
+          20, 116.39900, 39.90500, 300,
+          40, 116.40000, 39.90421, 300,
+          60, 116.39900, 39.90340, 300,
+          80, 116.39746, 39.90260, 300,
+          100, 116.39590, 39.90340, 300,
+          120, 116.39490, 39.90421, 300,
+          140, 116.39590, 39.90500, 300,
+          160, 116.39746, 39.90421, 300,
         ],
       },
       path: {
         material: { solidColor: { color: { rgba: [0, 255, 255, 230] } } },
         width: 4,
-        leadTime: 200,
-        trailTime: 200,
       },
     },
   ];
 
-  let drone;
   Cesium.CzmlDataSource.load(czmlData).then((dataSource) => {
     viewer.dataSources.add(dataSource);
-    drone = dataSource.entities.getById('DroneFlight');
+    const drone = dataSource.entities.getById('DroneFlight');
 
-    // ✅ 无人机大小缩小，贴合真实场景
     drone.model = {
       uri: '/models/drone.glb',
-      minimumPixelSize: 10,    // 最小显示像素（远看也能看到）
-      maximumScale: 20,        // 最大缩放比例（控制大小，这里缩小）
-      scale: 0.1,             // 直接缩小模型本身 20 倍
-      silhouetteColor: Cesium.Color.WHITE,
-      silhouetteSize: 1,
+      scale: 0.15,
     };
-
     drone.orientation = new Cesium.VelocityOrientationProperty(drone.position);
 
     viewer.clock.multiplier = 1.5;
     viewer.clock.shouldAnimate = true;
-    viewer.clock.currentTime = Cesium.JulianDate.fromIso8601(
-      '2025-01-01T00:00:00Z'
+  });
+
+  // ==============================================
+  // 🔥 🔥 🔥 修复：点击建筑 → 正常显示，不黑屏
+  // ==============================================
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction((movement) => {
+    const pick = viewer.scene.pick(movement.position);
+    if (!pick || !pick.id) return;
+
+    // 获取点击点坐标
+    const cartesian = viewer.scene.globe.pick(
+      viewer.camera.getPickRay(movement.position),
+      viewer.scene
+    );
+    if (!cartesian) return;
+
+    // ✅ 关键：相机抬升 30 米，防止扎进地下 / 模型内部
+    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    cartographic.height += 30; // 安全高度
+    const safePosition = Cesium.Cartesian3.fromRadians(
+      cartographic.longitude,
+      cartographic.latitude,
+      cartographic.height
     );
 
-    // 点击暂停 / 继续
-    let isPlaying = true;
-    viewer.screenSpaceEventHandler.setInputAction(() => {
-      isPlaying = !isPlaying;
-      viewer.clock.shouldAnimate = isPlaying;
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-  });
+    // ✅ 相机飞到点击点上方
+    viewer.camera.flyTo({
+      destination: safePosition,
+      orientation: {
+        heading: viewer.camera.heading,
+        pitch: Cesium.Math.toRadians(-15), // 向下看，不黑屏
+        roll: 0.0,
+      },
+      duration: 0.5,
+    });
+
+    console.log('✅ 点击建筑，相机已安全定位');
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 });
 </script>
 
