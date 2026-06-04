@@ -6,8 +6,7 @@
 import { onMounted } from 'vue';
 import * as Cesium from 'cesium';
 
-Cesium.Ion.defaultAccessToken =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYzFhNDc5Zi1mYjVlLTQ5MDEtODIzOC0xMDc5Njk4ZGJjY2QiLCJpZCI6NDE3MzgzLCJpYXQiOjE3NzYwNjAxNzJ9.VGBInP8aLnTt5ibVkS3ZcXYquQ7OqGjJzWRvHEaf8T4';
+Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN || '';
 
 onMounted(async () => {
   const viewer = new Cesium.Viewer('cesiumContainer', {
