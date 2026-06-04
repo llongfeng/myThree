@@ -34,7 +34,7 @@ const initStreaming = async () => {
         StartVideoMuted: true,
         HoveringMouse: true,
       },
-      signalingUrl: 'ws://localhost:8888', // 你的信令服务器地址
+      signalingUrl: import.meta.env.VITE_UE_SIGNALING_URL || 'ws://localhost:8888',
     });
 
     stream = new PixelStreaming(config);

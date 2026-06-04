@@ -4,7 +4,7 @@ import { resolve } from 'path'
 import cesium from 'vite-plugin-cesium'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
     cesium(),
@@ -36,5 +36,8 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src')
     }
+  },
+  esbuild: {
+    drop: mode === 'production' ? ['console', 'debugger'] : []
   }
-})
+}))
