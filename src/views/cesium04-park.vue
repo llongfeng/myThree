@@ -1,6 +1,6 @@
 <template>
   <div class="campus-page">
-    <!-- 分层控制面板 -->
+    <!-- Layer control panel -->
     <div class="layer-control">
       <label
         ><input type="checkbox" v-model="showBuilding" @change="changeLayer" />
@@ -24,7 +24,6 @@
       >
     </div>
 
-    <!-- Cesium 容器 -->
     <div ref="container" class="cesium-container"></div>
   </div>
 </template>
@@ -32,27 +31,25 @@
 <script setup>
 import * as Cesium from 'cesium';
 import { ref, onMounted } from 'vue';
+import { createCesiumViewer, setupCesiumClickHandler } from '../utils/cesium-setup';
 
 const container = ref(null);
 let viewer = null;
 
-// ==================== 分层显示开关 ====================
 const showBuilding = ref(true);
 const showDevice = ref(true);
 const showCamera = ref(true);
 const showFire = ref(true);
 const showPeople = ref(true);
 
-// 实体存储（用于分层控制）
 const entityGroup = {
-  buildingTileset: null, // 3D建筑
+  buildingTileset: null,
   devices: [],
   cameras: [],
   fires: [],
   peoples: [],
 };
 
-// ==================== 园区点位数据 ====================
 const pointData = [
   {
     type: 'device',
@@ -128,7 +125,6 @@ const pointData = [
   },
 ];
 
-// ==================== 生命周期入口 ====================
 onMounted(() => {
   if (!container.value) return;
   initCesium();
@@ -138,31 +134,19 @@ onMounted(() => {
   flyToCampus();
 });
 
-// ==================== 1. 初始化 Cesium ====================
 function initCesium() {
-  viewer = new Cesium.Viewer(container.value, {
-    terrain: Cesium.Terrain.fromWorldTerrain(),
-    animation: false,
-    timeline: false,
-    baseLayerPicker: false,
-    geocoder: false,
-    homeButton: false,
-    sceneModePicker: false,
-    navigationHelpButton: false,
-    fullscreenButton: false,
-    creditContainer: document.createElement('div'),
+  viewer = createCesiumViewer(container.value, {
+    terrain: true,
+    enableLighting: true,
   });
-  viewer.scene.globe.enableLighting = true;
 }
 
-// ==================== 2. 加载 3D 建筑白模 ====================
 function loadBuilding() {
   Cesium.createOsmBuildingsAsync().then((tileset) => {
     entityGroup.buildingTileset = viewer.scene.primitives.add(tileset);
   });
 }
 
-// ==================== 3. 添加所有点位 ====================
 function addAllPoints() {
   pointData.forEach((item) => {
     const entity = viewer.entities.add({
@@ -187,7 +171,6 @@ function addAllPoints() {
       properties: item,
     });
 
-    // 分类存入
     if (item.type === 'device') entityGroup.devices.push(entity);
     if (item.type === 'camera') entityGroup.cameras.push(entity);
     if (item.type === 'fire') entityGroup.fires.push(entity);
@@ -195,7 +178,6 @@ function addAllPoints() {
   });
 }
 
-// ==================== 4. 点位颜色 ====================
 function getPointColor(type) {
   switch (type) {
     case 'device':
@@ -211,17 +193,13 @@ function getPointColor(type) {
   }
 }
 
-// ==================== 5. 点击事件：弹窗 + 相机飞行 ====================
 function bindClickEvent() {
-  const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
-  handler.setInputAction((movement) => {
-    const pick = viewer.scene.pick(movement.position);
+  setupCesiumClickHandler(viewer, (pick) => {
     if (!Cesium.defined(pick) || !Cesium.defined(pick.id)) return;
 
     const target = pick.id;
     viewer.selectedEntity = target;
 
-    // 相机飞过去
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(
         target.properties.lon,
@@ -235,26 +213,19 @@ function bindClickEvent() {
         roll: 0,
       },
     });
-  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  });
 }
 
-// ==================== 6. 分层控制（已修复报错） ====================
 function changeLayer() {
-  // 建筑
   if (entityGroup.buildingTileset) {
     entityGroup.buildingTileset.show = showBuilding.value;
   }
-  // 设备
   entityGroup.devices.forEach((i) => (i.show = showDevice.value));
-  // 摄像头
   entityGroup.cameras.forEach((i) => (i.show = showCamera.value));
-  // 消防
   entityGroup.fires.forEach((i) => (i.show = showFire.value));
-  // 人员
   entityGroup.peoples.forEach((i) => (i.show = showPeople.value));
 }
 
-// ==================== 7. 视角飞到园区 ====================
 function flyToCampus() {
   viewer.camera.flyTo({
     destination: Cesium.Cartesian3.fromDegrees(116.4037, 39.9146, 700),

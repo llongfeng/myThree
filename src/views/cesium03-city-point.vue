@@ -5,12 +5,11 @@
 <script setup>
 import * as Cesium from 'cesium';
 import { ref, onMounted } from 'vue';
+import { createCesiumViewer, setupCesiumClickHandler } from '../utils/cesium-setup';
 
-// ============== 响应式引用 ==============
 const container = ref(null);
 let viewer = null;
 
-// ============== 城市数据 ==============
 const cityData = [
   { name: '北京', lon: 116.4038, lat: 39.9149 },
   { name: '上海', lon: 121.4737, lat: 31.2304 },
@@ -26,50 +25,33 @@ const cityData = [
   { name: '长沙', lon: 112.9388, lat: 28.2282 },
 ];
 
-// ============== 入口 ==============
 onMounted(() => {
   if (!container.value) return;
-
-  initViewer(); // 初始化地球
-  addCityPoints(); // 添加城市点位
-  bindClickEvent(); // 绑定点击事件
-  flyToOverview(); // 自动总览视角
+  initViewer();
+  addCityPoints();
+  bindClickEvent();
+  flyToOverview();
 });
 
-// ============== 1. 初始化 Cesium 视图 ==============
 function initViewer() {
-  viewer = new Cesium.Viewer(container.value, {
-    terrain: Cesium.Terrain.fromWorldTerrain(),
-    animation: false,
-    timeline: false,
-    baseLayerPicker: false,
-    geocoder: false,
-    homeButton: false,
-    sceneModePicker: false,
-    navigationHelpButton: false,
-    fullscreenButton: false,
-    creditContainer: document.createElement('div'),
+  viewer = createCesiumViewer(container.value, {
+    terrain: true,
+    enableLighting: true,
   });
-
-  // 开启光照效果
-  viewer.scene.globe.enableLighting = true;
 }
 
-// ============== 2. 批量添加城市点位 Entity ==============
 function addCityPoints() {
   cityData.forEach((city) => {
     viewer.entities.add({
       name: city.name,
       position: Cesium.Cartesian3.fromDegrees(city.lon, city.lat, 1000),
-      // 点位样式：圆点
       point: {
         pixelSize: 10,
         color: Cesium.Color.AQUA,
         outlineColor: Cesium.Color.WHITE,
         outlineWidth: 2,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY, // 永远显示在最前
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
-      // 鼠标悬浮文字
       label: {
         text: city.name,
         font: '14px sans-serif',
@@ -81,7 +63,6 @@ function addCityPoints() {
         outlineWidth: 2,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
-      // 自定义数据，方便点击时读取
       properties: {
         lon: city.lon,
         lat: city.lat,
@@ -90,39 +71,29 @@ function addCityPoints() {
   });
 }
 
-// ============== 3. 绑定鼠标点击事件 ==============
 function bindClickEvent() {
-  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  setupCesiumClickHandler(viewer, (pick) => {
+    if (!Cesium.defined(pick) || !Cesium.defined(pick.id)) return;
 
-  // 左键点击
-  handler.setInputAction((movement) => {
-    // 拾取点击的实体
-    const pick = viewer.scene.pick(movement.position);
+    const entity = pick.id;
+    viewer.selectedEntity = entity;
 
-    if (Cesium.defined(pick) && Cesium.defined(pick.id)) {
-      const entity = pick.id;
-      // 弹出信息框
-      viewer.selectedEntity = entity;
-
-      // 相机飞过去
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(
-          entity.properties.lon,
-          entity.properties.lat,
-          8000
-        ),
-        duration: 1.5,
-        orientation: {
-          heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-45), // 倾斜俯视
-          roll: 0,
-        },
-      });
-    }
-  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(
+        entity.properties.lon,
+        entity.properties.lat,
+        8000
+      ),
+      duration: 1.5,
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0,
+      },
+    });
+  });
 }
 
-// ============== 4. 相机飞到总览视角，显示所有城市 ==============
 function flyToOverview() {
   const positions = cityData.map((item) =>
     Cesium.Cartesian3.fromDegrees(item.lon, item.lat)

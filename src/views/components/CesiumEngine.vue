@@ -6,34 +6,24 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+import { createCesiumViewer } from '../../utils/cesium-setup'
 
 const container = ref(null)
 let viewer = null
 
-// 初始化 Cesium 地球
 function initCesium() {
-    // 1. 创建地球
-    viewer = new Cesium.Viewer(container.value, {
-        terrain: Cesium.Terrain.fromWorldTerrain(), // 开启三维地形
-        timeline: false,
-        animation: false,
+    viewer = createCesiumViewer(container.value, {
+        terrain: true,
         baseLayerPicker: true,
-        geocoder: false,
-        homeButton: false,
-        navigationHelpButton: false,
+        hideCredits: false,
     })
 
-    // 2. 隐藏版权信息
     viewer.cesiumWidget.creditContainer.style.display = 'none'
 
-    // 3. 飞行到目标城市（你可以改成你公司/家乡坐标）
     flyToLocation()
-
-    // 4. 添加点位标注
     addPoint()
 }
 
-// 飞行定位
 function flyToLocation() {
     viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(116.39748, 39.90882, 2000),
@@ -46,7 +36,6 @@ function flyToLocation() {
     })
 }
 
-// 添加点位 + 文字标签
 function addPoint() {
     viewer.entities.add({
         position: Cesium.Cartesian3.fromDegrees(116.39748, 39.90882, 50),
@@ -66,7 +55,6 @@ function addPoint() {
     })
 }
 
-// 销毁 Cesium（切换页面必须）
 const destroy = () => {
     if (viewer) {
         viewer.destroy()
@@ -74,7 +62,6 @@ const destroy = () => {
     }
 }
 
-// 窗口自适应
 const resize = () => {
     if (viewer) {
         viewer.resize()

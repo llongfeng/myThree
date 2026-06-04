@@ -5,27 +5,23 @@
 <script setup>
 import { onMounted } from 'vue';
 import * as Cesium from 'cesium';
+import { createCesiumViewer, setupCesiumClickHandler } from '../utils/cesium-setup';
 
 Cesium.Ion.defaultAccessToken =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYzFhNDc5Zi1mYjVlLTQ5MDEtODIzOC0xMDc5Njk4ZGJjY2QiLCJpZCI6NDE3MzgzLCJpYXQiOjE3NzYwNjAxNzJ9.VGBInP8aLnTt5ibVkS3ZcXYquQ7OqGjJzWRvHEaf8T4';
 
 onMounted(async () => {
-  const viewer = new Cesium.Viewer('cesiumContainer', {
+  const viewer = createCesiumViewer('cesiumContainer', {
     imageryProvider: false,
-    baseLayerPicker: false,
+    hideCredits: false,
     timeline: true,
     animation: true,
-    geocoder: false,
-    homeButton: false,
-    sceneModePicker: false,
-    navigationHelpButton: false,
-    fullscreenButton: false,
     sceneMode: Cesium.SceneMode.MORPHING,
   });
 
   viewer.cesiumWidget.creditContainer.style.display = 'none';
 
-  // 鼠标控制
+  // Mouse controls
   viewer.scene.screenSpaceCameraController.enableZoom = true;
   viewer.scene.screenSpaceCameraController.enableRotate = true;
   viewer.scene.screenSpaceCameraController.enableTilt = true;
@@ -33,7 +29,7 @@ onMounted(async () => {
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50;
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = 20000;
 
-  // 高德地图
+  // Gaode maps
   const gaodeVec = new Cesium.UrlTemplateImageryProvider({
     url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
   });
@@ -46,7 +42,7 @@ onMounted(async () => {
   const layer = viewer.imageryLayers.addImageryProvider(gaodeImg);
   layer.alpha = 0.5;
 
-  // 视角
+  // Camera
   viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(116.39746, 39.90421, 1000),
     orientation: {
@@ -56,13 +52,13 @@ onMounted(async () => {
     },
   });
 
-  // 3D建筑
+  // 3D buildings
   Cesium.Cesium3DTileset.fromIonAssetId(2275207).then((tileset) => {
     viewer.scene.primitives.add(tileset);
     console.log('✅ 北京3D建筑加载成功');
   });
 
-  // ===================== 无人机飞行 =====================
+  // Drone flight via CZML
   const czmlData = [
     { id: 'document', name: 'Circle-Tiananmen', version: '1.0' },
     {
@@ -103,43 +99,31 @@ onMounted(async () => {
     viewer.clock.shouldAnimate = true;
   });
 
-  // ==============================================
-  // 🔥 🔥 🔥 修复：点击建筑 → 正常显示，不黑屏
-  // ==============================================
-  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  handler.setInputAction((movement) => {
-    const pick = viewer.scene.pick(movement.position);
+  // Click building -> fly to safe position
+  setupCesiumClickHandler(viewer, (pick, cartesian) => {
     if (!pick || !pick.id) return;
-
-    // 获取点击点坐标
-    const cartesian = viewer.scene.globe.pick(
-      viewer.camera.getPickRay(movement.position),
-      viewer.scene
-    );
     if (!cartesian) return;
 
-    // ✅ 关键：相机抬升 30 米，防止扎进地下 / 模型内部
     const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
-    cartographic.height += 30; // 安全高度
+    cartographic.height += 30;
     const safePosition = Cesium.Cartesian3.fromRadians(
       cartographic.longitude,
       cartographic.latitude,
       cartographic.height
     );
 
-    // ✅ 相机飞到点击点上方
     viewer.camera.flyTo({
       destination: safePosition,
       orientation: {
         heading: viewer.camera.heading,
-        pitch: Cesium.Math.toRadians(-15), // 向下看，不黑屏
+        pitch: Cesium.Math.toRadians(-15),
         roll: 0.0,
       },
       duration: 0.5,
     });
 
     console.log('✅ 点击建筑，相机已安全定位');
-  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  });
 });
 </script>
 
