@@ -6,32 +6,24 @@
 import { onMounted } from 'vue';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-
-// Cesium Ion 令牌
+import { createCesiumViewer } from '../../utils/cesium-setup';
 
 onMounted(() => {
-    const viewer = new Cesium.Viewer('cesiumContainer', {
+    const viewer = createCesiumViewer('cesiumContainer', {
         imageryProvider: false,
         terrainProvider: false,
-        baseLayerPicker: false,
-        timeline: false,
-        animation: false,
-        geocoder: false,
-        homeButton: false,
-        sceneModePicker: false,
-        navigationHelpButton: false,
-        fullscreenButton: false,
+        hideCredits: false,
     });
 
     viewer.cesiumWidget.creditContainer.style.display = 'none';
 
-    // 1. 高德底图（矢量）
+    // Gaode base map
     const gaodeVec = new Cesium.UrlTemplateImageryProvider({
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
     });
     viewer.imageryLayers.addImageryProvider(gaodeVec);
 
-    // 2. 相机视角：天安门上空
+    // Camera view
     viewer.camera.setView({
         destination: Cesium.Cartesian3.fromDegrees(116.39746, 39.90421, 1000),
         orientation: {
@@ -41,11 +33,11 @@ onMounted(() => {
         },
     });
 
-    // 3. 加载你自己的城市模型（故宫坐标）
+    // Load city model
     viewer.entities.add({
         position: Cesium.Cartesian3.fromDegrees(116.39746, 39.90421, 10),
         model: {
-            uri: '/gltf/city2.glb', // 确保你的模型文件在 public/gltf/ 目录下
+            uri: '/gltf/city2.glb',
             scale: 15,
             minimumPixelSize: 128,
         },
