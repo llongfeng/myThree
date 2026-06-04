@@ -6,6 +6,7 @@ export interface LoadedModel {
 }
 
 export type LoadSuccessCallback = (models: LoadedModel[]) => void
+export type LoadErrorCallback = (path: string, error: unknown) => void
 export type LoadPathList = string[]
 
 export interface SceneConfig {

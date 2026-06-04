@@ -207,6 +207,8 @@ function loadModel() {
         createDronePath()
         // 加载无人机
         loadDroneModel()
+    }, undefined, (error) => {
+        console.error('Failed to load city model:', error)
     })
 }
 
@@ -250,6 +252,8 @@ function loadDroneModel() {
         // set：设置x/y/z三轴缩放
         drone.scale.set(DroneConfig.scale, DroneConfig.scale, DroneConfig.scale)
         scene.add(drone)
+    }, undefined, (error) => {
+        console.error('Failed to load drone model:', error)
     })
 }
 
@@ -473,6 +477,7 @@ function animate() {
 
 // ==================== 11. 窗口大小自适应 ====================
 window.addEventListener('resize', () => {
+    if (!camera || !renderer) return
     // 更新相机宽高比
     camera.aspect = window.innerWidth / window.innerHeight
     // 更新相机投影矩阵（必须调用）

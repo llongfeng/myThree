@@ -301,6 +301,8 @@ function addAllFlyLines() {
 function add3dBuildings() {
   Cesium.createOsmBuildingsAsync().then((tileset) => {
     viewer.scene.primitives.add(tileset);
+  }).catch((error) => {
+    console.error('Failed to load OSM buildings:', error);
   });
 }
 </script>

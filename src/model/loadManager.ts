@@ -1,6 +1,6 @@
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import type { LoadPathList, LoadSuccessCallback, LoadedModel } from '@/types'
+import type { LoadPathList, LoadSuccessCallback, LoadErrorCallback, LoadedModel } from '@/types'
 
 /**
  * Load model list and return loaded objects.
@@ -8,7 +8,7 @@ import type { LoadPathList, LoadSuccessCallback, LoadedModel } from '@/types'
  * @param pathList file path array
  * @param suc callback when all files are loaded
  */
-export const loadManager = (pathList: LoadPathList, suc: LoadSuccessCallback) => {
+export const loadManager = (pathList: LoadPathList, suc: LoadSuccessCallback, onError?: LoadErrorCallback) => {
   const gltfLoader = new GLTFLoader()
   const fbxLoader = new FBXLoader()
   // 保存加载成功模型对象数组
@@ -32,6 +32,7 @@ export const loadManager = (pathList: LoadPathList, suc: LoadSuccessCallback) =>
         undefined,
         (error) => {
           console.error('FBX load error:', path, error)
+          onError?.(path, error)
           loadedCount += 1
           if (loadedCount === pathList.length) {
             suc(model)
@@ -54,6 +55,7 @@ export const loadManager = (pathList: LoadPathList, suc: LoadSuccessCallback) =>
         undefined,
         (error) => {
           console.error('GLTF load error:', path, error)
+          onError?.(path, error)
           loadedCount += 1
           if (loadedCount === pathList.length) {
             suc(model)
@@ -62,6 +64,7 @@ export const loadManager = (pathList: LoadPathList, suc: LoadSuccessCallback) =>
       )
     } else {
       console.warn('Unsupported model type:', path)
+      onError?.(path, new Error(`Unsupported model format: ${path}`))
       loadedCount += 1
       if (loadedCount === pathList.length) {
         suc(model)
