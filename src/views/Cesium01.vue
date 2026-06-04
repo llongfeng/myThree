@@ -60,6 +60,8 @@ onMounted(async () => {
   Cesium.Cesium3DTileset.fromIonAssetId(2275207).then((tileset) => {
     viewer.scene.primitives.add(tileset);
     console.log('✅ 北京3D建筑加载成功');
+  }).catch((error) => {
+    console.error('Failed to load 3D tileset:', error);
   });
 
   // ===================== 无人机飞行 =====================
@@ -93,6 +95,11 @@ onMounted(async () => {
     viewer.dataSources.add(dataSource);
     const drone = dataSource.entities.getById('DroneFlight');
 
+    if (!drone) {
+      console.error('DroneFlight entity not found in CZML data');
+      return;
+    }
+
     drone.model = {
       uri: '/models/drone.glb',
       scale: 0.15,
@@ -101,6 +108,8 @@ onMounted(async () => {
 
     viewer.clock.multiplier = 1.5;
     viewer.clock.shouldAnimate = true;
+  }).catch((error) => {
+    console.error('Failed to load CZML data:', error);
   });
 
   // ==============================================

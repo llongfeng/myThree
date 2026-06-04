@@ -159,6 +159,8 @@ function initCesium() {
 function loadBuilding() {
   Cesium.createOsmBuildingsAsync().then((tileset) => {
     entityGroup.buildingTileset = viewer.scene.primitives.add(tileset);
+  }).catch((error) => {
+    console.error('Failed to load OSM buildings:', error);
   });
 }
 
